@@ -3,6 +3,8 @@ import akka.actor.ActorSystem
 import akka.actor.Props
 import java.util.UUID
 import scala.util.Random
+import scala.concurrent._
+import scala.concurrent.duration._
 
 object Robot {
   case object ChangeWorkpost
@@ -16,7 +18,7 @@ object Robot {
 class Robot extends Actor {
 
   import Robot._
-  import Factory._
+  import Foobartory._
 
   def receive = {
     case ChangeWorkpost => {
@@ -56,7 +58,7 @@ class Robot extends Actor {
   }
 }
 
-object Factory {
+object Foobartory {
   case object AssignTask
   case object AssignFirstTask
   case object FooMined
@@ -68,16 +70,21 @@ object Factory {
 
 }
 
-class Factory extends Actor {
 
-  import Factory._
+class Foobartory extends Actor {
+
+  def printResources(foo: Int, bar: Int, foobar: Int, euro: Int, robot: Int) = {
+    println(s"Resources: { foos = ${foo}; bars = ${bar}; foobars = ${foobar}; euros = ${euro}; robots = ${robot} }")
+  }
+
+  import Foobartory._
   import Robot._
 
   var foo: Int = 0
   var bar: Int = 0
   var foobar: Int = 0
   var euro: Int = 0
-  var robots: Int = 2
+  var robot: Int = 2
 
   val robot1 = context.actorOf(Props[Robot](), name = "robot-1")
   val robot2 = context.actorOf(Props[Robot](), name = "robot-2")
@@ -99,7 +106,8 @@ class Factory extends Actor {
     case FooMined =>
       val senderName = sender().path.name
       foo += 1
-      println(s"${senderName} mined a foo: ${foo} foos available")
+      println(s"${senderName} mined a foo.")
+      printResources(foo, bar, foobar, euro, robot)
       if (foo > 9) {
         sender() ! ChangeWorkpost
         sender() ! MineBar
@@ -110,7 +118,9 @@ class Factory extends Actor {
     case BarMined =>
       val senderName = sender().path.name
       bar += 1
-      println(s"${senderName} mined a bar: ${bar} bars available")
+      println(s"${senderName} mined a bar.")
+      printResources(foo, bar, foobar, euro, robot)
+
       if (bar > 6) {
         sender() ! ChangeWorkpost
         if (bar > 0 && foo > 3) {
@@ -127,7 +137,9 @@ class Factory extends Actor {
     case FoobarAssembledSuccess =>
       val senderName = sender().path.name
       foobar += 1
-      println(s"${senderName} assembled a foobar successfuly: ${foobar} foobars available")
+      println(s"${senderName} assembled a foobar successfuly.")
+      printResources(foo, bar, foobar, euro, robot)
+
       if (bar > 0 && foo > 3) {
         bar -= 1
         foo -= 1
@@ -135,6 +147,8 @@ class Factory extends Actor {
       } else {
         sender() ! ChangeWorkpost
         if (foobar >= 5) {
+          val quantity = Random.between(1, 6)
+          foobar -= quantity
           sender() ! SellFoobar(Random.between(1, 6))
         } else {
           sender() ! MineFoo
@@ -145,7 +159,9 @@ class Factory extends Actor {
     case FoobarAssembledFailure =>
       val senderName = sender().path.name
       bar += 1
-      println(s"${senderName} failed to assemble a foobar: ${foobar} foobars available")
+      println(s"${senderName} failed to assemble a foobar.")
+      printResources(foo, bar, foobar, euro, robot)
+
       if (bar > 0 && foo > 3) {
         bar -= 1
         foo -= 1
@@ -165,13 +181,15 @@ class Factory extends Actor {
     case FoobarSold(quantity) =>
       val senderName = sender().path.name
       euro += quantity
-      println(s"${senderName} sold ${quantity} foobars: ${euro} euros available")
+      println(s"${senderName} sold ${quantity} foobars.")
+      printResources(foo, bar, foobar, euro, robot)
+
       if (foobar >= 5) {
         val quantity = Random.between(1, 6)
         foobar -= quantity
         sender() ! SellFoobar(quantity)
       } else {
-        sender()! ChangeWorkpost
+        sender() ! ChangeWorkpost
         if (euro >= 3 && foo >= 6) {
           euro -= 3
           foo -= 6
@@ -182,14 +200,15 @@ class Factory extends Actor {
       }
 
 
-
     case RobotBuilt =>
       val senderName = sender().path.name
-      val name = s"robot-${robots + 1}"
+      val name = s"robot-${robot + 1}"
       val childRef = context.actorOf(Props[Robot](), name)
-      robots += 1
-      println(s"${senderName} built a robot, there are ${robots} robot now")
-      if (robots == 30) {
+      robot += 1
+      println(s"${senderName} built a robot.")
+      printResources(foo, bar, foobar, euro, robot)
+
+      if (robot == 30) {
         println("30 ROBOTS BUILT!")
         context.system.terminate()
       }
@@ -203,19 +222,17 @@ class Factory extends Actor {
         sender() ! MineFoo
       }
 
-
-
     case _ => println("huh?")
   }
 }
 
 object Main extends App {
 
-  import Factory._
+  import Foobartory._
 
-  val system = ActorSystem("HelloSystem")
-  // default Actor constructor
-  val foobartory = system.actorOf(Props[Factory], name = "helloactor")
+  val system = ActorSystem("foobartory")
+
+  val foobartory = system.actorOf(Props[Foobartory], name = "helloactor")
   foobartory ! AssignFirstTask
-  while(true) {Thread.sleep(100)}
+  Await.ready(system.whenTerminated, Duration(100, "minutes"))
 }
